@@ -1,6 +1,8 @@
 package example.agents;
 
 import it.unibo.ing2.jade.operations.In;
+import it.unibo.ing2.jade.operations.Out;
+import it.unibo.ing2.jade.operations.Rd_all;
 import it.unibo.ing2.jade.operations.TucsonAction;
 import it.unibo.ing2.jade.operations.TucsonOperationHandler;
 import it.unibo.ing2.jade.service.TuCSoNHelper;
@@ -15,7 +17,6 @@ import java.net.InetSocketAddress;
 import alice.logictuple.LogicTuple;
 import alice.tucson.api.ITucsonOperation;
 import alice.tucson.api.TucsonTupleCentreId;
-import alice.tucson.api.exceptions.TucsonInvalidTupleCentreIdException;
 
 public class Worker extends Agent {
 
@@ -23,7 +24,7 @@ public class Worker extends Agent {
 	private transient TucsonOperationHandler handler;
 	private transient TucsonTupleCentreId workerTC;
 	
-	private String nextIp;
+	private String nextIp, template, nodeName;
 	private int nextPort;
 	private Location mainContainer;
 
@@ -81,12 +82,12 @@ public class Worker extends Agent {
 				//Ottengo le informazioni sul container di destinazione
 				LogicTuple tuple = LogicTuple.parse("cont(X, Y)");
 				TucsonAction action = new In(workerTC, tuple);
-				System.out.println("Reading cont(X,Y) in "+workerTC);
+				System.out.println("Reading cont(Container, Node) in "+workerTC);
 				ITucsonOperation result = handler.executeSynch(action, null);
 
 				String contName = result.getLogicTupleResult().getArg(0)
 						.toString();
-				String nodeName = result.getLogicTupleResult().getArg(1).toString();
+				nodeName = result.getLogicTupleResult().getArg(1).toString();
 				contName = contName.replace("'", "");
 				System.out.println("Ho letto contName = " + contName);
 				ContainerID dest = new ContainerID();
@@ -125,9 +126,28 @@ public class Worker extends Agent {
 				System.out.println("imposto il nodo principale a "+ip+":"+port);
 				helper.setMainNode(ip, port);
 				
-				//Invio tutto al nodo TuCSoN centrale
+				TucsonTupleCentreId venditeTC = new TucsonTupleCentreId("vendite", ip, ""+port);
+				TucsonTupleCentreId defaultTC = new TucsonTupleCentreId("default", ip, ""+port);
+				
+				//Conto le vendite
+				LogicTuple tuple = LogicTuple.parse("vendita(X)");
+				TucsonAction action = new Rd_all(venditeTC, tuple);
+				ITucsonOperation result = handler.executeSynch(action, null);
+				int nVendite = result.getLogicTupleListResult().size();
+				
+				//Scrivo il numero di vendite
+				tuple = LogicTuple.parse("vendite("+nodeName+"("+nVendite+"))");
+				action = new Out(defaultTC, tuple);
+				handler.executeSynch(action, null);
+				
+				//Controllo gli incassi
+//				tuple = LogicTuple.parse("incassi(X)");
+//				action = new Rd(venditeTC, tuple);
+//				result = 
+				
+				//Invio tutto al nodo TuCSoN centrale				
 				System.out.println("Migro il TC");
-				helper.doClone("centrale", "X", new String[]{"default"});
+				helper.doMove("centrale", template, new String[]{"default"});
 				
 				helper.deauthenticate(Worker.this);
 				Worker.this.addBehaviour(new MigrateAgent());
